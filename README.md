@@ -1,1 +1,67 @@
-### Esse ira ser o repositorio do projeto 01
+# Analisador Léxico para TONTO
+
+Analisador léxico para a linguagem TONTO (Textual Ontology Language), desenvolvido para a disciplina de Compiladores (UFERSA).
+
+## Integrantes
+
+- Luiz Felipe — setup, palavras reservadas, estereótipos, tipos nativos, meta-atributos, símbolos especiais, contador de linha/coluna
+- Gabriel Cleverton — regras de nomes (classe, relação, instância, datatype), tratamento de erros
+- Rian Valentin — saídas (tabela de tokens, tabela de síntese), testes de integração, documentação
+
+## Requisitos
+
+- Python 3.10+
+- PLY 3.11
+
+## Instalação
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Uso
+
+```bash
+cd src
+python main.py caminho/para/arquivo.tonto
+```
+
+Exemplo:
+
+```bash
+python main.py ../dataset-test/CarExample/src/car.tonto
+```
+
+## Estrutura do projeto
+
+```
+projeto1/
+├── src/
+│   ├── lexer.py   # regras léxicas (PLY)
+│   └── main.py    # ponto de entrada
+├── dataset-test/  # exemplos de teste (.tonto)
+├── requirements.txt
+└── README.md
+```
+
+## O que o lexer reconhece
+
+- Estereótipos de classe (`kind`, `role`, `phase`, `relator`, etc.)
+- Estereótipos de relação (`mediation`, `componentOf`, `characterization`, etc.)
+- Palavras reservadas (`package`, `import`, `genset`, `specializes`, etc.)
+- Tipos nativos (`number`, `string`, `boolean`, `date`, `time`, `datetime`)
+- Meta-atributos (`ordered`, `const`, `derived`, `subsets`, `redefines`)
+- Símbolos especiais (`{`, `}`, `(`, `)`, `[`, `]`, `..`, `<>--`, `--<>`, `--`, `*`, `@`, `:`)
+- Nomes de classes, relações, instâncias e datatypes (convenções específicas)
+- Números
+- Linha e coluna de cada token
+
+## Saída
+
+Para cada token: tipo, valor, linha e coluna. Erros léxicos são reportados por linha, sem interromper a análise.
+
+## Exemplos de teste
+
+Retirados de: <https://github.com/patricioalencar/Compiladores_UFERSA>
