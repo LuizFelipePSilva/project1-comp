@@ -1,0 +1,15 @@
+{
+  "projectName": "TDAHExample",
+  "displayName": "TDAH Example",
+  "authors": ["Davi Adriano Guimarães"],
+  "license": "MIT",
+  "version": "1.0.0",
+  "publisher": "UFERSA",
+  "dependencies": {
+    "TDAHExample": {
+      "url": "https://github.com/patricioalencar/Compiladores_UFERSA/tree/main/TDAHExample"
+     
+    }
+  },
+  "outFolder": "generated-files"
+}
