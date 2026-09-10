@@ -59,7 +59,6 @@ tokens = (
   'RANGE', # ..
   'COMPOSITION', # <>--
   'AGGREGATION', # --<>
-  'ASS'
   'STAR',# *
   'AT', # @
   'COLON', # :
