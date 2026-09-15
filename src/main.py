@@ -1,5 +1,6 @@
 import sys
-from lexer import build_lexer, find_column
+from report import coletar_tokens, tabela_analitica, tabela_sintese
+
 
 def main():
     if len(sys.argv) != 2:
@@ -7,15 +8,14 @@ def main():
         sys.exit(1)
 
     path = sys.argv[1]
-    with open(path, encoding='utf-8') as f:
-        data = f.read()
+    tokens = coletar_tokens(path)
 
-    lexer = build_lexer()
-    lexer.input(data)
+    print('=== VISÃO ANALÍTICA ===')
+    print(tabela_analitica(tokens))
+    print()
+    print('=== TABELA SÍNTESE ===')
+    print(tabela_sintese(tokens))
 
-    for tok in lexer:
-        col = find_column(tok, lexer)
-        print(f"{tok.type:20} {tok.value!r:30} linha={tok.lineno} col={col}")
 
 if __name__ == '__main__':
     main()
