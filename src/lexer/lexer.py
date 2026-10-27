@@ -2,11 +2,11 @@ import re
 import ply.lex as lex
 
 RESERVED = {
-  'genset', 'disjoint', 'complete', 'general', 'specifics',
-  'where', 'package', 'import', 'specializes',
-  'type', 'datatype', 'enum', 'relation', 'powertype',
+    'genset', 'disjoint', 'complete', 'general', 'specifics',
+    'where', 'import', 'specializes', 'type', 'datatype', 'enum',
+    'relation', 'powertype', 'overlapping', 'incomplete', 'categorizer',
+    'functional-complexes',
 }
-
 RELATION_STEREOTYPE = {
   'material', 'derivation', 'comparative', 'mediation',
   'characterization', 'externalDependence', 'componentOf', 'memberOf',
@@ -30,10 +30,11 @@ NATIVE_TYPES = {
 META_ATTRIBUTES = {
   'ordered', 'const', 'derived', 'subsets', 'redefines'
 }
+RESERVED_MAP = {w: w.upper().replace('-', '_') for w in RESERVED}
 
 tokens = (
+    'PACKAGE',
     'RELATION_STEREOTYPE',
-    'RESERVED',
     'CLASS_STEREOTYPE',
     'NATIVE_TYPE',
     'META_ATTRIBUTE',
@@ -56,13 +57,13 @@ tokens = (
     'STAR',
     'AT',
     'COLON',
-    'ASSOCIATION'
-)
-
-# ---------- Classificação de identificador ----------
+    'COMMA',
+    'SEMICOLON',
+    'ASSOCIATION',
+) + tuple(RESERVED_MAP.values())
 
 DATATYPE_RE = re.compile(r'^[A-Za-z]+DataType$')
-INSTANCE_RE = re.compile(r'^[A-Za-z](?:_?[A-Za-z]+)*[0-9]+$')
+INSTANCE_RE = re.compile(r'^[A-Za-z]+[0-9]+$')
 CLASS_RE    = re.compile(r'^[A-Z][A-Za-z]*(?:_[A-Za-z]+)*$')
 RELATION_RE = re.compile(r'^[a-z][A-Za-z]*(?:_[A-Za-z]+)*$')
 
@@ -70,7 +71,7 @@ def classify_id(value):
     if DATATYPE_RE.match(value):
         return 'DATATYPE_NAME'
     if INSTANCE_RE.match(value):
-        return 'INSTANCE_NAME'
+        return 'INSTANCE_NAME'  
     if CLASS_RE.match(value):
         return 'CLASS_NAME'
     if RELATION_RE.match(value):
@@ -108,6 +109,8 @@ t_LBRACKET = r'\['
 t_RBRACKET = r'\]'
 t_COLON    = r':'
 t_AT       = r'@'
+t_COMMA    = r','
+t_SEMICOLON = r';'
 
 def t_RANGE(t):
     r'\.\.'
@@ -151,11 +154,12 @@ def t_STRING(t):
 
 def t_FUNCTIONAL_COMPLEXES(t):
     r'functional-complexes'
-    t.type = 'RESERVED'
+    t.type = 'FUNCTIONAL_COMPLEXES'
     return t
 
 def t_PACKAGE(t):
-    r'Package'
+    r'package\b'
+    t.lexer.expect_package_name = True
     return t
 
 def t_ID(t):
@@ -164,25 +168,22 @@ def t_ID(t):
         t.type = 'CLASS_STEREOTYPE'
     elif t.value in RELATION_STEREOTYPE:
         t.type = 'RELATION_STEREOTYPE'
-    elif t.value in RESERVED:
-        t.type = 'RESERVED'
-        if t.value == 'package':
-            t.lexer.expect_package_name = True
-        return t
+    elif t.value in RESERVED_MAP:
+        t.type = RESERVED_MAP[t.value]
     elif t.value in NATIVE_TYPES:
         t.type = 'NATIVE_TYPE'
     elif t.value in META_ATTRIBUTES:
         t.type = 'META_ATTRIBUTE'
+    elif getattr(t.lexer, 'expect_package_name', False):
+        t.lexer.expect_package_name = False
+        t.type = 'PACKAGE_NAME'
     else:
-        if getattr(t.lexer, 'expect_package_name', False):
-            t.lexer.expect_package_name = False
-            t.type = 'PACKAGE_NAME'
-            return t
         kind = classify_id(t.value)
         if kind is None:
             report_lex_error(t)
             return None
         t.type = kind
+
     return t
 
 def t_newline(t):
@@ -197,13 +198,15 @@ def find_column(t, lexer):
 t_ignore = ' \t'
 
 def t_COMMENT(t):
-    r'//.*'
+    r'//[^\n]*'
     pass
 
 def t_COMMENT_BLOCK(t):
     r'/\*([^*]|\*+[^*/])*\*+/'
-    t.lexer.lineno += t.value.count('\n')
-    pass
+    newlines = t.value.count('\n')
+    if newlines:
+        t.lexer.lineno += newlines
+        t.lexer.line_start = t.lexpos + t.value.rfind('\n') + 1
 
 def t_error(t):
     line = t.lineno

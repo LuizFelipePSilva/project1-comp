@@ -1,21 +1,23 @@
-import sys
-from report import coletar_tokens, tabela_analitica, tabela_sintese
+from parser.parser import parse
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("uso: python main.py <arquivo.tonto>")
-        sys.exit(1)
+    with open("exemplo.tonto", "r", encoding="utf-8") as file:
+        source = file.read()
 
-    path = sys.argv[1]
-    tokens = coletar_tokens(path)
+    result, errors = parse(source)
 
-    print('=== VISÃO ANALÍTICA ===')
-    print(tabela_analitica(tokens))
-    print()
-    print('=== TABELA SÍNTESE ===')
-    print(tabela_sintese(tokens))
+    if errors:
+        for error in errors:
+            print(
+                f"Linha {error['line']}: {error['message']}\n"
+                f"Sugestão: {error['suggestion']}"
+            )
+        return
+
+    print("Análise sintática concluída.")
+    print(result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

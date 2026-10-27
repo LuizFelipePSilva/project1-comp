@@ -6,7 +6,7 @@ import argparse
 import csv
 from collections import Counter
 
-from lexer import build_lexer, find_column
+from .lexer import build_lexer, find_column
 
 
 def coletar_tokens(caminho):
