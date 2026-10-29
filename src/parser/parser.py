@@ -146,8 +146,7 @@ def p_attribute_name(p):
 def p_attribute_type(p):
        """attribute_type : NATIVE_TYPE
                          | DATATYPE_NAME
-                         | CLASS_NAME
-                         | RELATION_NAME"""
+                         | CLASS_NAME"""
        p[0] = p[1]
        
 def p_cardinality(p):
