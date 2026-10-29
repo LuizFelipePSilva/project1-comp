@@ -9,7 +9,7 @@ sys.path.insert(
 )
 
 from lexer.lexer import tokens, build_lexer
-
+from parser.relations import *  
 
 # Resultado e erros da análise
 syntax_errors = []
