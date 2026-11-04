@@ -2,17 +2,15 @@
 import ply.yacc as yacc
 import os
 import sys
-from lexer.lexer import tokens, build_lexer, find_column
-from parser.relations import *
-from parser.typedecls import *
 
 sys.path.insert(
     0,
     os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 )
 
-from lexer.lexer import tokens, build_lexer
-from parser.relations import *  
+from lexer.lexer import tokens, build_lexer, find_column
+from parser.relations import *
+from parser.typedecls import *
 
 # Resultado e erros da análise
 syntax_errors = []
@@ -70,8 +68,9 @@ def p_declaration_class(p):
 
 def p_declaration_error(p):
     """declaration : error"""
+    # recuperação: o PLY descarta tokens até o próximo estereótipo/palavra-chave
     p[0] = {"kind": "error", "line": p.lineno(1)}
-    
+
 def p_identifier(p):
     """identifier : CLASS_NAME
                   | RELATION_NAME
@@ -237,41 +236,6 @@ def p_error(token):
         msg=f"Token inesperado '{token.value}' ({token.type}).",
         suggestion=sugestao,
     )
-    
-def report_syntax_error(line, msg, suggestion, column=None):
-    syntax_errors.append({
-        "line": line,
-        "column": column,
-        "message": msg,
-        "suggestion": suggestion,
-    })
-
-_lexer = None
-def p_error(token):
-    if token is None:
-        report_syntax_error(
-            line=_lexer.lineno if _lexer else 0,
-            msg="Fim inesperado do arquivo.",
-            suggestion="Feche com '}' a declaração que ficou aberta.",
-        )
-        return
-
-    if token.type == "COMMA":
-        sugestao = "Vírgula só é aceita em listas (specializes, specifics, enum). Remova-a."
-    elif token.type == "PACKAGE":
-        sugestao = "Só pode haver um 'package', e ele deve ser a primeira declaração."
-    elif token.type in ("CLASS_STEREOTYPE", "DATATYPE", "ENUM", "GENSET", "RELATION"):
-        sugestao = "Provavelmente falta fechar o bloco anterior com '}'."
-    else:
-        sugestao = ("Verifique a estrutura da declaração: datatype Nome { atributo: tipo }, "
-                    "enum Nome { Ind01, Ind02 }, kind Nome { ... }.")
-
-    report_syntax_error(
-        line=token.lineno,
-        column=find_column(token, _lexer),
-        msg=f"Token inesperado '{token.value}' ({token.type}).",
-        suggestion=sugestao,
-    )
 
 
 parser = yacc.yacc(start="ontology")
@@ -287,17 +251,22 @@ def parse(source):
 
 
 if __name__ == "__main__":
+    import json
+
     example = """
     package myPackage
     import bar
     subkind X specializes A, B
+    datatype Address {
+        street: string
+        number: number
+    }
+    enum EyeColor { Blue01, Green02 }
     """
 
     result, errors = parse(example)
 
     if errors:
-        for error in errors:
-            print(error)
+        print(json.dumps(errors, ensure_ascii=False, indent=2))
     else:
-        print("Análise sintática concluída.")
-        print(result)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
