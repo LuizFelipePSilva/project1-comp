@@ -1,0 +1,76 @@
+package UniversityModel
+
+// ---------- tipos de dados ----------
+datatype Address {
+    street: string
+    number: number
+}
+
+datatype PhoneNumber {
+    areaCode: number
+    digits: string
+}
+
+// ---------- classe enumerada ----------
+enum EyeColor { Blue01, Green02, Brown03, Black04 }
+
+// ---------- classes ----------
+kind Person {
+    name: string
+    birthDate: date {const}
+    eyeColor: EyeColor
+    phone: PhoneNumber
+}
+
+phase Child specializes Person
+phase Teenager specializes Person
+phase YoungAdult specializes Person
+
+role Employee specializes Person
+role UniversityProfessor specializes Employee
+
+roleMixin Employer
+role UniversityEmployer specializes Employer
+
+category Organization
+
+kind University specializes Organization {
+    address: Address
+    @componentOf [1] <>-- [1..*] Department
+    @componentOf [1] <>-- [0..*] Classroom
+}
+
+kind Department {
+    name: string
+}
+
+kind Room
+subkind Classroom specializes Room
+
+collective Staff
+subkind SeniorStaff specializes Staff
+subkind JuniorStaff specializes Staff
+
+role UniversityStudent specializes Person
+role ActiveStudent specializes UniversityStudent
+role FormerStudent specializes UniversityStudent
+
+relator EmploymentContract
+relator Enrollment
+
+// ---------- generalizações (forma curta e forma longa) ----------
+disjoint complete genset PersonAgeGroup where Child, Teenager, YoungAdult specializes Person
+
+disjoint complete genset StaffLevel {
+    general Staff
+    specifics SeniorStaff, JuniorStaff
+}
+
+overlapping incomplete genset StudentStatus where ActiveStudent, FormerStudent specializes UniversityStudent
+
+// ---------- relações externas ----------
+@mediation relation EmploymentContract [1..*] -- [1] Employee
+@mediation relation EmploymentContract [1..*] -- [1] Employer
+@mediation relation Enrollment [0..*] -- [1] University
+@mediation relation Enrollment [1..*] -- [1] UniversityStudent
+@material relation Employee [0..*] -- hasMember -- [1] Staff
