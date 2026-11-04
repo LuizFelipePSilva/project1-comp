@@ -46,6 +46,7 @@ def tabela_sintese(analises):
     for a in analises:
         r = a["resultado"]
         if not r:
+            L.append(f"\nArquivo {a['arquivo']}: sem síntese (erro fatal)")
             continue
         pacotes.add(r["package"]["name"])
         rels_int = [(c["name"], m) for c in r["classes"] for m in c["attributes"]
@@ -96,8 +97,11 @@ def para_json(analises):
             "file": a["arquivo"],
             "lexical_errors": a["erros_lexicos"],
             "syntax_errors": a["erros_sintaticos"],
+            "fatal": r is None,
         }
-        if r:
+        if r is None:
+            item["message"] = "sem síntese (erro fatal)"
+        else:
             item.update({
                 "package": r["package"]["name"],
                 "imports": [i["name"] for i in r["imports"]],

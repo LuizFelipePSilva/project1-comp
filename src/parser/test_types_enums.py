@@ -4,7 +4,7 @@
 import glob
 import os
 import unittest
-
+import json
 from parser.report import analisar_texto, analisar_arquivo, tabela_sintese, relatorio_erros
 
 HEADER = "package Teste\n"
@@ -66,7 +66,17 @@ class TestInvalidos(unittest.TestCase):
     def test_package_ausente(self):
         a = analisar_texto("kind A\n")
         self.assertEqual(a["erros_sintaticos"][0]["line"], 1)
+        self.assertEqual(a["erros_sintaticos"][0]["suggestion"],
+                         "Todo modelo deve começar com package Nome")
 
+    def test_package_duplicado_nao_usa_sugestao_de_package_ausente(self):
+        r, e = analisa("package Outro\nkind A\n")
+        self.assertNotIn("começar com package", e[0]["suggestion"])
+
+    def test_arquivo_sem_resultado_aparece_na_sintese(self):
+        a = analisar_texto("kind A\n", "x.tonto")
+        self.assertIsNone(a["resultado"])
+        self.assertIn("Arquivo x.tonto: sem síntese (erro fatal)", tabela_sintese([a]))
     def test_varios_erros_sincronizam_no_proximo_construto(self):
         r, e = analisa("enum Cor Blue01\ndatatype D {\n x string\n}\nenum Ok { A01, B02 }\nkind Fim\n")
         self.assertGreaterEqual(len(e), 2)
@@ -97,6 +107,16 @@ class TestDataset(unittest.TestCase):
         analises = [analisar_arquivo(f) for f in self.arquivos()]
         self.assertIn("TABELA SÍNTESE", tabela_sintese(analises))
         self.assertIn("RELATÓRIO DE ERROS", relatorio_erros(analises))
+        
+    def test_json_marca_arquivo_sem_sintese(self):
+        fatal = analisar_texto("kind A\n", "x.tonto")
+        ok = analisar_texto("package P\nkind A\n", "y.tonto")
+        d = json.loads(para_json([fatal, ok]))["files"]
+        self.assertTrue(d[0]["fatal"])
+        self.assertEqual(d[0]["message"], "sem síntese (erro fatal)")
+        self.assertNotIn("package", d[0])
+        self.assertFalse(d[1]["fatal"])
+        self.assertNotIn("message", d[1])
 
 
 if __name__ == "__main__":
