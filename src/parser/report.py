@@ -88,27 +88,28 @@ def relatorio_erros(analises):
     return "\n".join(L)
 
 def para_json(analises):
-    arquivos = []
+    """Síntese + erros em estrutura JSON (uma entrada por arquivo)."""
+    files = []
     for a in analises:
         r = a["resultado"]
         item = {
-            "arquivo": a["arquivo"],
-            "erros_lexicos": a["erros_lexicos"],
-            "erros_sintaticos": a["erros_sintaticos"],
+            "file": a["arquivo"],
+            "lexical_errors": a["erros_lexicos"],
+            "syntax_errors": a["erros_sintaticos"],
         }
         if r:
             item.update({
-                "pacote": r["package"]["name"],
+                "package": r["package"]["name"],
                 "imports": [i["name"] for i in r["imports"]],
                 "classes": [
-                    {"nome": c["name"], "estereotipo": c["stereotype"], "pai": c["parent"],
-                     "relacoes_internas": [m for m in c["attributes"] if m.get("kind") == "relation"]}
+                    {"name": c["name"], "stereotype": c["stereotype"], "parent": c["parent"],
+                     "internal_relations": [m for m in c["attributes"] if m.get("kind") == "relation"]}
                     for c in r["classes"]
                 ],
-                "relacoes_externas": [x for x in r["relations"] if not x["internal"]],
+                "external_relations": [x for x in r["relations"] if not x["internal"]],
                 "datatypes": [d["name"] for d in r["datatypes"]],
-                "enums": [{"nome": e["name"], "individuos": e["individuals"]} for e in r["enums"]],
+                "enums": [{"name": e["name"], "individuals": e["individuals"]} for e in r["enums"]],
                 "gensets": r["gensets"],
             })
-        arquivos.append(item)
-    return json.dumps({"arquivos": arquivos}, ensure_ascii=False, indent=2)
+        files.append(item)
+    return json.dumps({"files": files}, ensure_ascii=False, indent=2)
