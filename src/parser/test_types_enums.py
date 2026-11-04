@@ -2,10 +2,11 @@
     cd src && python -m unittest parser.test_types_enums -v
 """
 import glob
+import json
 import os
 import unittest
-import json
-from parser.report import analisar_texto, analisar_arquivo, tabela_sintese, relatorio_erros
+
+from parser.report import analisar_texto, analisar_arquivo, tabela_sintese, relatorio_erros, para_json
 
 HEADER = "package Teste\n"
 DATASET = os.path.join(os.path.dirname(__file__), "..", "..", "dataset-test")
@@ -102,6 +103,29 @@ class TestDataset(unittest.TestCase):
             with self.subTest(arquivo=rel):
                 a = analisar_arquivo(os.path.join(DATASET, rel))
                 self.assertEqual(a["erros_lexicos"] + a["erros_sintaticos"], [])
+                
+    def test_json_marca_arquivo_sem_sintese(self):
+            fatal = analisar_texto("kind A\n", "x.tonto")
+            ok = analisar_texto("package P\nkind A\n", "y.tonto")
+            d = json.loads(para_json([fatal, ok]))["files"]
+            self.assertTrue(d[0]["fatal"])
+            self.assertEqual(d[0]["message"], "sem síntese (erro fatal)")
+            self.assertNotIn("package", d[0])
+            self.assertFalse(d[1]["fatal"])
+            self.assertNotIn("message", d[1])
+            
+    def test_parser_example_cobre_todas_as_construcoes(self):
+            a = analisar_arquivo(os.path.join(DATASET, "ParserExample", "src", "parser_example.tonto"))
+            self.assertEqual(a["erros_lexicos"] + a["erros_sintaticos"], [])
+            r = a["resultado"]
+            self.assertEqual(r["package"]["name"], "UniversityModel")
+            self.assertEqual(len(r["classes"]), 21)
+            self.assertEqual([d["name"] for d in r["datatypes"]], ["Address", "PhoneNumber"])
+            self.assertEqual([e["name"] for e in r["enums"]], ["EyeColor"])
+            self.assertEqual([g["form"] for g in r["gensets"]], ["short", "long", "short"])
+            self.assertEqual(sum(1 for x in r["relations"] if not x["internal"]), 5)
+            internas = sum(1 for c in r["classes"] for m in c["attributes"] if m.get("kind") == "relation")
+            self.assertEqual(internas, 2)
 
     def test_saidas(self):
         analises = [analisar_arquivo(f) for f in self.arquivos()]
@@ -117,6 +141,8 @@ class TestDataset(unittest.TestCase):
         self.assertNotIn("package", d[0])
         self.assertFalse(d[1]["fatal"])
         self.assertNotIn("message", d[1])
+        
+    
 
 
 if __name__ == "__main__":

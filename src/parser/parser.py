@@ -220,19 +220,37 @@ def p_error(token):
         )
         return
 
-    primeiro_token = len(parser.statestack) <= 1  
+    vazio_ou_inicio = len(parser.statestack) <= 1
 
-    if primeiro_token and token.type != "PACKAGE":
+    if token is None:
+        if vazio_ou_inicio:
+            sugestao = "Arquivo vazio: todo modelo deve começar com package Nome."
+        else:
+            sugestao = "Feche com '}' a declaração que ficou aberta."
+        report_syntax_error(
+            line=_lexer.lineno if _lexer else 0,
+            msg="Fim inesperado do arquivo.",
+            suggestion=sugestao,
+        )
+        return
+
+    if vazio_ou_inicio and token.type != "PACKAGE":
         sugestao = "Todo modelo deve começar com package Nome"
     elif token.type == "COMMA":
         sugestao = "Vírgula só é aceita em listas (specializes, specifics, enum). Remova-a."
     elif token.type == "PACKAGE":
         sugestao = "Só pode haver um 'package', e ele deve ser a primeira declaração."
+    elif token.type == "RBRACE":
+        sugestao = "'}' sem bloco aberto. Remova-o."
     elif token.type in ("CLASS_STEREOTYPE", "DATATYPE", "ENUM", "GENSET", "RELATION"):
         sugestao = "Provavelmente falta fechar o bloco anterior com '}'."
+    elif token.type == "RELATION_NAME":
+        sugestao = ("Tipo inválido ou nome inesperado. Tipos nativos: number, string, "
+                    "boolean, date, time, datetime; ou use uma classe/datatype.")
     else:
         sugestao = ("Verifique a estrutura da declaração: datatype Nome { atributo: tipo }, "
                     "enum Nome { Ind01, Ind02 }, kind Nome { ... }.")
+
     report_syntax_error(
         line=token.lineno,
         column=find_column(token, _lexer),
