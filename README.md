@@ -18,7 +18,7 @@ O programa lê arquivos `.tonto`, verifica a estrutura das declarações e produ
 ```bash
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r ../dataset-test/requirements.txt
 ```
 
 ## Como usar
