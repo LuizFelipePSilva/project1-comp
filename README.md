@@ -9,7 +9,6 @@ O programa lê arquivos `.tonto`, verifica a estrutura das declarações e produ
 - **Luiz Felipe**: setup, palavras reservadas, estereótipos, tipos nativos, meta-atributos, símbolos especiais, contador de linha/coluna
 - **Gabriel Cleverton**: regras de nomes (classe, relação, instância, datatype), tratamento de erros no lexer. No parser: datatypes, enums, saídas (síntese, relatório de erros, JSON), recuperação de erro e testes
 - **Rian Valentin**: tabela de tokens, tabela de síntese léxica, testes de integração do lexer, documentação
-- _[preencher: quem fez pacotes, classes, relações e gensets no parser]_
 
 ## Requisitos e instalação
 
