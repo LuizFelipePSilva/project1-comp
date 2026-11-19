@@ -115,7 +115,7 @@ class TestDataset(unittest.TestCase):
             self.assertNotIn("message", d[1])
             
     def test_parser_example_cobre_todas_as_construcoes(self):
-            a = analisar_arquivo(os.path.join(DATASET, "ParserExample", "src", "parser_example.tonto"))
+            a = analisar_arquivo(os.path.join(DATASET, "ParserExample", "src", "parser.tonto"))
             self.assertEqual(a["erros_lexicos"] + a["erros_sintaticos"], [])
             r = a["resultado"]
             self.assertEqual(r["package"]["name"], "UniversityModel")

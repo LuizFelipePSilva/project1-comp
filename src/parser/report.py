@@ -7,6 +7,7 @@ import json
 from contextlib import redirect_stdout
 
 from parser.parser import parse
+from parser.symbol_table import build_symbol_table
 
 LEX_ERR = re.compile(r"Erro léxico na linha (\d+), coluna (\d+): (.*?)(?: Sugestão: (.*))?$")
 
@@ -31,7 +32,8 @@ def analisar_texto(fonte, nome="<texto>"):
         if m:
             lex.append({"line": int(m[1]), "column": int(m[2]), "message": m[3].strip(),
                         "suggestion": m[4] or "Verifique a convenção de nomes."})
-    return {"arquivo": nome, "resultado": resultado, "erros_lexicos": lex, "erros_sintaticos": erros}
+    return {"arquivo": nome, "resultado": resultado, "erros_lexicos": lex, "erros_sintaticos": erros,
+            "tabela_simbolos": build_symbol_table(resultado).to_dict() if resultado else None}
 
 
 def analisar_arquivo(caminho):
@@ -68,6 +70,27 @@ def tabela_sintese(analises):
     L.append(f"\nTOTAL: {len(pacotes)} pacote(s), {total['classes']} classe(s), "
              f"{total['rel_int']} relação(ões) interna(s), {total['rel_ext']} externa(s), "
              f"{total['datatypes']} datatype(s), {total['enums']} enum(s), {total['gensets']} genset(s)")
+    return "\n".join(L)
+
+
+def tabela_simbolos_texto(analises):
+    """Visualização textual da tabela de símbolos (escopos e membros)."""
+    L = ["=== TABELA DE SÍMBOLOS ==="]
+    for a in analises:
+        L.append(f"\nArquivo {a['arquivo']}")
+        tab = a.get("tabela_simbolos")
+        if not tab:
+            L.append("  sem tabela de símbolos (erro fatal)")
+            continue
+        L.append("  Escopo global:")
+        for s in tab["global"]["symbols"]:
+            label = s["name"] if s["name"] is not None else s.get("internal_id")
+            L.append(f"    {s['kind']} {label}")
+        for scope in tab["scopes"]:
+            L.append(f"  Escopo {scope['name']} ({scope['kind']}):")
+            for s in scope["symbols"]:
+                label = s["name"] if s["name"] is not None else s.get("internal_id")
+                L.append(f"    {s['kind']} {label}")
     return "\n".join(L)
 
 
@@ -114,6 +137,7 @@ def para_json(analises):
                 "datatypes": [d["name"] for d in r["datatypes"]],
                 "enums": [{"name": e["name"], "individuals": e["individuals"]} for e in r["enums"]],
                 "gensets": r["gensets"],
+                "symbol_table": a.get("tabela_simbolos"),
             })
         files.append(item)
     return json.dumps({"files": files}, ensure_ascii=False, indent=2)
