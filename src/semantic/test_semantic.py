@@ -353,8 +353,10 @@ class TestIntegracao(unittest.TestCase):
             next(p for p in roles if p.status == STATUS_COMPLETO).participants["genset"],
             "StudentStatus",
         )
-        self.assertEqual(result.coercions, [])
-
+        # relators/phases deste exemplo são incompletos de propósito (Pessoa B);
+        # aqui só se exige que subkind e role não gerem erros.
+        self.assertEqual(
+            [c for c in result.coercions if c.code.startswith(("ODP_SUBKIND", "ODP_ROLE"))], [])
     def test_ordem_dos_detectores(self):
         self.assertEqual(registered_names()[:2], ["subkind", "role"])
 

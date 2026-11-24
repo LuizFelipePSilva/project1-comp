@@ -213,8 +213,8 @@ class SemanticContext:
         first = self.stereotype_of(specifics[0])
         if first in candidates:
             return first
-        return sorted(st for st in candidates if st is not None)[0] if candidates else None
-
+        ranked = sorted(st for st in candidates if st is not None)
+        return ranked[0] if ranked else None
 
 # ----------------------------------------------------------------------
 # Ponto de entrada
