@@ -22,64 +22,97 @@ class RelatorDetector:
     def detect(self, ctx) -> Detection:
         detection = Detection()
         relators = ctx.by_stereotype(PATTERN)
-        materials = [r for r in ctx.relations if r.get("stereotype") == "material"]
-        for decl in relators:
-            detection.patterns.append(self._check(ctx, detection, decl, materials))
+        materials = [
+            relation for relation in ctx.relations
+            if relation.get("stereotype") == "material"
+        ]
+
+        for declaration in relators:
+            detection.patterns.append(
+                self._check(ctx, detection, declaration, materials)
+            )
         return detection
 
-    def _check(self, ctx, detection, decl, materials) -> PatternMatch:
-        name = decl.get("name")
-        line = decl.get("line") or ctx.line_of(name)
+    def _check(self, ctx, detection, declaration, materials) -> PatternMatch:
+        name = declaration.get("name")
+        line = declaration.get("line") or ctx.line_of(name)
         status = STATUS_COMPLETO
 
-        mediations = [m for m in (decl.get("attributes") or [])
-                      if m.get("kind") == "relation" and m.get("stereotype") == "mediation"]
-        mediations += [r for r in ctx.relations
-                       if r.get("stereotype") == "mediation" and r.get("source") == name]
-        targets = list(dict.fromkeys(m.get("target") for m in mediations))
-        lines = [line] + [m.get("line") for m in mediations]
+        mediations = [
+            relation
+            for relation in (declaration.get("attributes") or [])
+            if relation.get("kind") == "relation"
+            and relation.get("stereotype") == "mediation"
+        ]
+        mediations.extend(
+            relation for relation in ctx.relations
+            if relation.get("stereotype") == "mediation"
+            and relation.get("source") == name
+        )
 
-        if len(targets) < 2:
-            status = STATUS_INVALIDO
-            falta = 2 - len(targets)
-            detection.coercions.append(coerce(
-                "ODP_RELATOR_MEDIACOES", line,
-                f"O relator {name} tem {len(targets)} mediação(ões) para classes "
-                "distintas; são necessárias ao menos 2.",
-                f"Dentro de 'relator {name}', acrescente {falta} linha(s) como "
-                "'@mediation [1..*] -- [1..*] <Role>'.",
-            ))
+        all_targets = list(dict.fromkeys(
+            mediation.get("target") for mediation in mediations
+        ))
+        valid_targets: list[str] = []
+        lines = [line]
 
-        for m in mediations:
-            target = m.get("target")
-            mline = m.get("line") or line
+        for mediation in mediations:
+            target = mediation.get("target")
+            mediation_line = mediation.get("line") or line
+            if mediation.get("line") is not None:
+                lines.append(mediation["line"])
+
             if not ctx.is_class(target):
                 status = STATUS_INVALIDO
                 detection.coercions.append(coerce(
-                    "ODP_RELATOR_ALVO_DESCONHECIDO", mline,
+                    "ODP_RELATOR_ALVO_DESCONHECIDO", mediation_line,
                     f"A mediação de {name} aponta para {target}, que não foi declarado.",
-                    f"Declare 'role {target} specializes <Kind>' ou corrija o nome.",
+                    f"Declare a entidade {target} ou corrija o nome da mediação.",
                 ))
-            elif ctx.stereotype_of(target) not in ROLE_LIKE:
+                continue
+
+            if ctx.stereotype_of(target) not in ROLE_LIKE:
                 status = STATUS_INVALIDO
                 detection.coercions.append(coerce(
-                    "ODP_RELATOR_ALVO_NAO_ROLE", mline,
+                    "ODP_RELATOR_ALVO_NAO_ROLE", mediation_line,
                     f"A mediação de {name} aponta para {target} "
                     f"({ctx.stereotype_of(target)}), mas deveria ser um role.",
-                    f"Declare {target} como 'role {target} specializes <Kind>'.",
+                    f"Declare {target} com um estereótipo de role.",
                 ))
+                continue
 
-        material = self._find_material(targets, materials)
+            if target not in valid_targets:
+                valid_targets.append(target)
+
+        if len(valid_targets) < 2:
+            status = STATUS_INVALIDO
+            missing = 2 - len(valid_targets)
+            detection.coercions.append(coerce(
+                "ODP_RELATOR_MEDIACOES", line,
+                f"O relator {name} possui {len(valid_targets)} mediação(ões) "
+                "para roles distintos e declarados; são necessárias ao menos 2.",
+                f"Acrescente {missing} mediação(ões) para role(s) declarado(s) "
+                "e distinto(s), usando '@mediation [1..*] -- [1..*] <Role>'.",
+            ))
+
+        material = (
+            self._find_material(valid_targets, materials)
+            if len(valid_targets) >= 2 else None
+        )
         if material is not None:
-            lines.append(material.get("line"))
-        elif len(targets) >= 2:
+            if material.get("line") is not None:
+                lines.append(material["line"])
+        elif len(valid_targets) >= 2:
             if status == STATUS_COMPLETO:
                 status = STATUS_INCOMPLETO
-            a, b = targets[0], targets[1]
-            text = f"@material relation {a} [1..*] -- relatedTo -- [1..*] {b}"
+            first, second = valid_targets[:2]
+            text = (
+                f"@material relation {first} [1..*] -- relatedTo -- [1..*] {second}"
+            )
             detection.coercions.append(coerce(
                 "ODP_RELATOR_SEM_MATERIAL", line,
-                f"O relator {name} não tem @material relation entre {a} e {b}.",
+                f"O relator {name} não tem @material relation entre "
+                f"roles mediados válidos.",
                 f"Acrescente:\n{text}",
                 fix={"op": "append", "text": text},
             ))
@@ -87,20 +120,22 @@ class RelatorDetector:
         return PatternMatch(
             pattern=PATTERN,
             status=status,
-            lines=sorted({n for n in lines if n is not None}),
+            lines=sorted({number for number in lines if number is not None}),
             participants={
                 "relator": name,
-                "mediations": targets,
-                "material": (material.get("name") or f"{material['source']}-{material['target']}")
-                if material else None,
+                "mediations": valid_targets,
+                "material": (
+                    material.get("name")
+                    or f"{material['source']}-{material['target']}"
+                ) if material else None,
             },
         )
 
     @staticmethod
     def _find_material(targets, materials):
         wanted = set(targets)
-        for rel in materials:
-            ends = {rel.get("source"), rel.get("target")}
-            if len(ends) == 2 and ends <= wanted:
-                return rel
+        for relation in materials:
+            endpoints = {relation.get("source"), relation.get("target")}
+            if len(endpoints) == 2 and endpoints <= wanted:
+                return relation
         return None

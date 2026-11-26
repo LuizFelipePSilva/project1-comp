@@ -11,7 +11,6 @@ from semantic.core import (
 from semantic.registry import register
 
 PATTERN = "phase"
-KIND_LIKE = {"kind", "collective", "quantity"}
 
 
 @register(PATTERN)
@@ -39,23 +38,12 @@ class PhaseDetector:
         self._uncovered(ctx, detection, phases, handled)
         return detection
 
-    def _rooted_in_kind(self, ctx, name, seen=None) -> bool:
-        seen = seen or set()
-        if name in seen:
-            return False
-        seen.add(name)
-        for parent in ctx.parents_of(name):
-            if ctx.stereotype_of(parent) in KIND_LIKE:
-                return True
-            if self._rooted_in_kind(ctx, parent, seen):
-                return True
-        return False
-
     def _validate_parents(self, ctx, detection, phases) -> None:
         for decl in phases:
             name = decl.get("name")
             line = decl.get("line") or ctx.line_of(name)
             parents = ctx.parents_of(name)
+
             if not parents:
                 detection.coercions.append(coerce(
                     "ODP_PHASE_SEM_PAI", line,
@@ -63,6 +51,8 @@ class PhaseDetector:
                     f"Declare como 'phase {name} specializes <Kind>'.",
                 ))
                 continue
+
+            declared_parents = [parent for parent in parents if ctx.is_class(parent)]
             for parent in parents:
                 if not ctx.is_class(parent):
                     detection.coercions.append(coerce(
@@ -71,17 +61,20 @@ class PhaseDetector:
                         f"Declare 'kind {parent}' ou corrija o nome em "
                         f"'phase {name} specializes {parent}'.",
                     ))
-            if any(ctx.is_class(p) for p in parents) and not self._rooted_in_kind(ctx, name):
+
+            if declared_parents and not any(
+                ctx.stereotype_of(parent) == "kind" for parent in declared_parents
+            ):
                 detection.coercions.append(coerce(
                     "ODP_PHASE_PAI_NAO_KIND", line,
-                    f"A phase {name} não descende de nenhuma classe do tipo kind.",
-                    f"Faça a classe-mãe de {name} ser um 'kind' "
-                    f"(ex.: 'kind {parents[0]}').",
+                    f"A phase {name} precisa especializar diretamente um kind.",
+                    f"Declare a phase com 'specializes <Kind>' usando um kind "
+                    "como classe-mãe direta.",
                 ))
 
     def _check_genset(self, ctx, detection, genset) -> PatternMatch:
         general = genset.get("general")
-        specifics = ctx.specifics(genset)
+        specifics = list(dict.fromkeys(ctx.specifics(genset)))
         gname = genset.get("name") or "(sem nome)"
         line = ctx.genset_line(genset)
         status = STATUS_COMPLETO
@@ -93,9 +86,19 @@ class PhaseDetector:
                 f"O genset {gname} usa '{general}' como general, mas ele não foi declarado.",
                 f"Declare '{general}' ou corrija o campo 'general' do genset {gname}.",
             ))
+        elif ctx.stereotype_of(general) != "kind":
+            status = STATUS_INVALIDO
+            detection.coercions.append(coerce(
+                "ODP_PHASE_GENERAL_NAO_KIND", line,
+                f"O general {general} do genset {gname} não é um kind.",
+                f"Use um kind como general do genset {gname}.",
+            ))
 
-        bad = [n for n in specifics
-               if ctx.stereotype_of(n) != PATTERN or general not in ctx.parents_of(n)]
+        valid_specifics = [
+            name for name in specifics
+            if ctx.stereotype_of(name) == PATTERN and general in ctx.parents_of(name)
+        ]
+        bad = [name for name in specifics if name not in valid_specifics]
         if bad:
             status = STATUS_INVALIDO
             detection.coercions.append(coerce(
@@ -105,29 +108,29 @@ class PhaseDetector:
                 f"Mantenha só phases declaradas com 'phase <Nome> specializes {general}'.",
             ))
 
-        if len(specifics) < 2:
+        if len(valid_specifics) < 2:
             status = STATUS_INVALIDO
             detection.coercions.append(coerce(
                 "ODP_PHASE_SEM_IRMA", line,
-                f"O genset {gname} tem só uma phase; é preciso ao menos uma irmã.",
+                f"O genset {gname} precisa conter ao menos duas phases irmãs.",
                 f"Acrescente outra phase que especialize {general} e liste-a em 'specifics'.",
             ))
 
-        if not ctx.has_modifier(genset, "disjoint"):
-            status = STATUS_INVALIDO
-            detection.coercions.append(coerce(
-                "ODP_PHASE_DISJOINT", line,
-                f"O genset {gname} agrupa phases mas não declara 'disjoint'.",
-                f"Acrescente 'disjoint' antes de 'genset {gname}' "
-                f"(ex.: 'disjoint complete genset {gname} ...').",
-            ))
-
-        if ctx.has_modifier(genset, "overlapping"):
+        has_disjoint = ctx.has_modifier(genset, "disjoint")
+        has_overlapping = ctx.has_modifier(genset, "overlapping")
+        if has_overlapping:
             status = STATUS_INVALIDO
             detection.coercions.append(coerce(
                 "ODP_PHASE_OVERLAPPING", line,
                 f"O genset {gname} declara 'overlapping', mas phases são disjuntas.",
                 f"Troque 'overlapping' por 'disjoint' no genset {gname}.",
+            ))
+        elif not has_disjoint:
+            status = STATUS_INVALIDO
+            detection.coercions.append(coerce(
+                "ODP_PHASE_DISJOINT", line,
+                f"O genset {gname} agrupa phases mas não declara 'disjoint'.",
+                f"Acrescente 'disjoint' antes de 'genset {gname}'.",
             ))
 
         if ctx.has_modifier(genset, "complete") and ctx.has_modifier(genset, "incomplete"):
@@ -142,23 +145,32 @@ class PhaseDetector:
             pattern=PATTERN,
             status=status,
             lines=ctx.lines_for(general, *specifics),
-            participants={"general": general, "specifics": specifics,
-                          "genset": genset.get("name")},
+            participants={
+                "general": general,
+                "specifics": specifics,
+                "genset": genset.get("name"),
+            },
         )
 
     def _uncovered(self, ctx, detection, phases, handled) -> None:
-        groups: dict = {}
+        groups: dict[str, list[str]] = {}
         for decl in phases:
             name = decl.get("name")
             if name in handled:
                 continue
-            for parent in (ctx.parents_of(name) or [None]):
+
+            direct_kind_parents = [
+                parent for parent in ctx.parents_of(name)
+                if ctx.is_class(parent) and ctx.stereotype_of(parent) == "kind"
+            ]
+            for parent in direct_kind_parents:
                 groups.setdefault(parent, []).append(name)
 
         for general, names in groups.items():
             specifics = list(dict.fromkeys(names))
             lines = ctx.lines_for(general, *specifics)
             line = lines[0] if lines else None
+
             if len(specifics) < 2:
                 status = STATUS_INVALIDO
                 detection.coercions.append(coerce(
@@ -170,16 +182,21 @@ class PhaseDetector:
             else:
                 status = STATUS_INCOMPLETO
                 gname = f"{general}_Phases"
-                text = (f"disjoint complete genset {gname} {{\n"
-                        f"    general {general}\n"
-                        f"    specifics {', '.join(specifics)}\n}}")
+                text = (
+                    f"disjoint complete genset {gname} {{\n"
+                    f"    general {general}\n"
+                    f"    specifics {', '.join(specifics)}\n}}"
+                )
                 detection.coercions.append(coerce(
                     "ODP_PHASE_SEM_GENSET", line,
                     f"As phases {', '.join(specifics)} de {general} não têm genset.",
                     f"Acrescente:\n{text}",
                     fix={"op": "append", "text": text},
                 ))
+
             detection.patterns.append(PatternMatch(
-                pattern=PATTERN, status=status, lines=lines,
+                pattern=PATTERN,
+                status=status,
+                lines=lines,
                 participants={"general": general, "specifics": specifics, "genset": None},
             ))
