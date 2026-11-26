@@ -52,7 +52,7 @@ class TestPhase(unittest.TestCase):
     def test_overlapping(self):
         r = analisar(PHASE_OK.replace("disjoint complete", "overlapping"))
         self.assertIn("ODP_PHASE_OVERLAPPING", codigos(r))
-        self.assertIn("ODP_PHASE_DISJOINT", codigos(r))
+        self.assertNotIn("ODP_PHASE_DISJOINT", codigos(r))
 
     def test_sem_genset_incompleto(self):
         r = analisar("kind P\nphase A specializes P\nphase B specializes P\n")
@@ -72,10 +72,16 @@ class TestPhase(unittest.TestCase):
     def test_pai_nao_kind(self):
         r = analisar("role R specializes X\nphase A specializes R\nphase B specializes R\n"
                      "kind X\n")
-        # R -> X (kind) : descende de kind, então é aceito
-        self.assertNotIn("ODP_PHASE_PAI_NAO_KIND", codigos(r))
+        # A phase precisa especializar um kind diretamente; herança indireta não basta.
+        self.assertIn("ODP_PHASE_PAI_NAO_KIND", codigos(r))
         r = analisar("relator Q\nphase A specializes Q\nphase B specializes Q\n")
         self.assertIn("ODP_PHASE_PAI_NAO_KIND", codigos(r))
+
+    def test_kind_deve_ser_pai_direto(self):
+        r = analisar("kind K\nrole R specializes K\n"
+                     "phase A specializes R\nphase B specializes R\n")
+        self.assertIn("ODP_PHASE_PAI_NAO_KIND", codigos(r))
+        self.assertNotIn("ODP_PHASE_SEM_GENSET", codigos(r))
 
     def test_sem_pai_e_pai_desconhecido(self):
         r = analisar("phase A\nphase B specializes Nada\n")
@@ -135,6 +141,30 @@ class TestRelator(unittest.TestCase):
                      "role RoleC specializes K\n"
                      "relator Rel {\n    @mediation [1..*] -- [1..*] RoleA\n"
                      "    @mediation [1..*] -- [1..*] RoleB\n}\n"
+                     "@material relation RoleA [1..*] -- rn -- [1..*] RoleC\n")
+        self.assertIn("ODP_RELATOR_SEM_MATERIAL", codigos(r))
+
+    def test_alvos_invalidos_nao_contam_como_mediacoes_validas(self):
+        r = analisar("kind K\nrole RoleA specializes K\n"
+                     "relator Rel {\n"
+                     "    @mediation [1..*] -- [1..*] RoleA\n"
+                     "    @mediation [1..*] -- [1..*] Nada\n"
+                     "    @mediation [1..*] -- [1..*] K\n"
+                     "}\n"
+                     "@material relation RoleA [1..*] -- rn -- [1..*] K\n")
+        codes = codigos(r)
+        self.assertIn("ODP_RELATOR_ALVO_DESCONHECIDO", codes)
+        self.assertIn("ODP_RELATOR_ALVO_NAO_ROLE", codes)
+        self.assertIn("ODP_RELATOR_MEDIACOES", codes)
+        self.assertNotIn("ODP_RELATOR_SEM_MATERIAL", codes)
+
+    def test_material_deve_ligar_dois_roles_mediados(self):
+        r = analisar("kind K\nrole RoleA specializes K\n"
+                     "role RoleB specializes K\nrole RoleC specializes K\n"
+                     "relator Rel {\n"
+                     "    @mediation [1..*] -- [1..*] RoleA\n"
+                     "    @mediation [1..*] -- [1..*] RoleB\n"
+                     "}\n"
                      "@material relation RoleA [1..*] -- rn -- [1..*] RoleC\n")
         self.assertIn("ODP_RELATOR_SEM_MATERIAL", codigos(r))
 
