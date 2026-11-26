@@ -206,13 +206,24 @@ class SemanticContext:
         return line if line is not None else self.line_of(genset.get("general"))
 
     def mediated_roles(self) -> set[str]:
-        """Roles alvo de ``@mediation`` dentro de classes ``relator``.
+        """Roles alvo de ``@mediation`` de um ``relator``.
+
+        Considera as duas formas aceitas pelo parser:
+
+        - mediação interna: ``relator R { @mediation ... Role }``;
+        - mediação externa: ``@mediation relation R ... Role``.
 
         Esses roles participam do padrão **Relator**. O detector de Role usa
         esse conjunto para não duplicar o padrão, mas nunca descarta um role
         que também participe de um genset de Role válido.
         """
         roles: set[str] = set()
+        relator_names = {
+            decl.get("name")
+            for decl in self.classes
+            if decl.get("stereotype") == "relator"
+        }
+
         for decl in self.classes:
             if decl.get("stereotype") != "relator":
                 continue
@@ -222,6 +233,14 @@ class SemanticContext:
                     target = member.get("target")
                     if self.stereotype_of(target) == "role":
                         roles.add(target)
+
+        for relation in self.relations:
+            if (relation.get("stereotype") == "mediation"
+                    and relation.get("source") in relator_names):
+                target = relation.get("target")
+                if self.stereotype_of(target) == "role":
+                    roles.add(target)
+
         return roles
 
     @staticmethod

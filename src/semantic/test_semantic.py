@@ -312,6 +312,39 @@ class TestRole(unittest.TestCase):
         self.assertEqual(
             [c for c in result.coercions if c.code.startswith("ODP_ROLE")], [])
 
+    def test_role_mediado_por_relator_externo_sem_genset_pertence_ao_relator(self):
+        result = analisar(
+            "kind Person\n"
+            "role Student specializes Person\n"
+            "relator Enrollment\n"
+            "@mediation relation Enrollment [1..*] -- [1..*] Student\n"
+        )
+
+        self.assertEqual(padroes(result, "role"), [])
+        self.assertEqual(
+            [c for c in result.coercions if c.code.startswith("ODP_ROLE")], [])
+
+    def test_role_mediado_por_relator_externo_com_genset_proprio_nao_e_ocultado(self):
+        result = analisar(
+            "kind Person\n"
+            "role Student specializes Person\n"
+            "role Teacher specializes Person\n"
+            "relator Enrollment\n"
+            "@mediation relation Enrollment [1..*] -- [1..*] Student\n"
+            "@mediation relation Enrollment [1..*] -- [1..*] Teacher\n"
+            "complete genset PersonRoles {\n"
+            "    general Person\n"
+            "    specifics Student, Teacher\n"
+            "}\n"
+        )
+
+        encontrados = padroes(result, "role")
+        self.assertEqual(len(encontrados), 1)
+        self.assertEqual(encontrados[0].status, STATUS_COMPLETO)
+        self.assertEqual(encontrados[0].participants["genset"], "PersonRoles")
+        self.assertEqual(
+            [c for c in result.coercions if c.code.startswith("ODP_ROLE")], [])
+
     def test_role_de_rolemixin_com_genset_proprio_nao_e_ocultado(self):
         result = analisar(
             "kind Person\n"
@@ -473,14 +506,22 @@ class TestIntegracao(unittest.TestCase):
         self.assertEqual(classroom.status, STATUS_INCOMPLETO)
 
         roles = padroes(result, "role")
-        self.assertEqual(len(roles), 4)
+        self.assertEqual(len(roles), 3)
         student_status = next(
             p for p in roles if p.participants["genset"] == "StudentStatus")
         self.assertEqual(student_status.status, STATUS_INVALIDO)
         self.assertEqual(
             sum(1 for p in roles if p.status == STATUS_COMPLETO), 0)
         self.assertEqual(
-            sum(1 for p in roles if p.status == STATUS_INCOMPLETO), 1)
+            sum(1 for p in roles if p.status == STATUS_INCOMPLETO), 0)
+        self.assertEqual(
+            sum(1 for p in roles if p.status == STATUS_INVALIDO), 3)
+
+        # Employee e UniversityStudent são mediados por relators neste
+        # exemplo; pertencem ao padrão Relator e não viram Role isolado.
+        specifics = {n for p in roles for n in p.participants["specifics"]}
+        self.assertNotIn("Employee", specifics)
+        self.assertNotIn("UniversityStudent", specifics)
 
         # Staff é collective e UniversityStudent é role: nenhum dos dois é kind.
         self.assertIn("ODP_SUBKIND_PAI_NAO_E_KIND", codigos(result))
