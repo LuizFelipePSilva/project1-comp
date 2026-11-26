@@ -49,12 +49,16 @@ class Inference:
     pattern: str
     confidence: float
     missing: list[str] = field(default_factory=list)
+    lines: list[int] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             "pattern": self.pattern,
             "confidence": self.confidence,
             "missing": list(self.missing),
+            "lines": list(self.lines),
+            "evidence": list(self.evidence),
         }
 
 
@@ -278,6 +282,8 @@ def analyze(ontology: dict | None, symbols: Any = None) -> SemanticResult:
     ctx = SemanticContext(ontology, symbols)
     for detector in ordered():
         result.extend(detector.detect(ctx))
+    from semantic.inference import infer
+    result.inferences.extend(infer(ctx, result))
     return result.sort()
 
 

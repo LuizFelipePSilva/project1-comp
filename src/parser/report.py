@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 
 from parser.parser import parse
 from parser.symbol_table import build_symbol_table
+from semantic.core import analyze as analyze_semantic
 
 LEX_ERR = re.compile(r"Erro léxico na linha (\d+), coluna (\d+): (.*?)(?: Sugestão: (.*))?$")
 
@@ -32,8 +33,12 @@ def analisar_texto(fonte, nome="<texto>"):
         if m:
             lex.append({"line": int(m[1]), "column": int(m[2]), "message": m[3].strip(),
                         "suggestion": m[4] or "Verifique a convenção de nomes."})
+    semantic = analyze_semantic(resultado).to_dict() if resultado else {
+        "patterns": [], "coercions": [], "inferences": []
+    }
     return {"arquivo": nome, "resultado": resultado, "erros_lexicos": lex, "erros_sintaticos": erros,
-            "tabela_simbolos": build_symbol_table(resultado).to_dict() if resultado else None}
+            "tabela_simbolos": build_symbol_table(resultado).to_dict() if resultado else None,
+            "semantic": semantic}
 
 
 def analisar_arquivo(caminho):
@@ -111,6 +116,49 @@ def relatorio_erros(analises):
     L.insert(1, f"Total: {n} erro(s)" if n else "Nenhum erro encontrado.")
     return "\n".join(L)
 
+
+def relatorio_semantico(analises):
+    """Exibe padrões, coerções e inferências semânticas por arquivo."""
+    L = ["=== ANÁLISE SEMÂNTICA (ODPs) ==="]
+    for a in analises:
+        L.append(f"\n{a['arquivo']}")
+        semantic = a.get("semantic") or {"patterns": [], "coercions": [], "inferences": []}
+        front_end_errors = ([ ("léxico", e) for e in a.get("erros_lexicos", []) ]
+                            + [("sintático", e) for e in a.get("erros_sintaticos", [])])
+        if front_end_errors:
+            L.append("  Erros léxicos/sintáticos:")
+            for kind, error in sorted(front_end_errors, key=lambda item: item[1].get("line", 0)):
+                col = f":{error['column']}" if error.get("column") else ""
+                L.append(f"    [{kind}] linha {error.get('line', '?')}{col}: {error.get('message', '')}")
+                if error.get("suggestion"):
+                    L.append(f"      Sugestão: {error['suggestion']}")
+        if not a.get("resultado"):
+            L.append("  Sem análise semântica (erro fatal no parser).")
+            continue
+        patterns = semantic.get("patterns", [])
+        if patterns:
+            L.append("  Padrões:")
+            for p in patterns:
+                lines = ", ".join(str(n) for n in p.get("lines", [])) or "sem linha"
+                L.append(f"    {p['pattern']} — {p['status']} (linhas {lines})")
+        else:
+            L.append("  Nenhum padrão ODP encontrado.")
+        coercions = semantic.get("coercions", [])
+        if coercions:
+            L.append("  Coerções/sugestões:")
+            for c in coercions:
+                line = f"linha {c['line']}" if c.get("line") else "linha desconhecida"
+                L.append(f"    [{c['code']}] {line}: {c.get('message', '')}")
+                L.append(f"      Sugestão: {c.get('suggestion', '')}")
+        inferences = semantic.get("inferences", [])
+        if inferences:
+            L.append("  Inferências de padrões incompletos:")
+            for i in inferences:
+                lines = ", ".join(str(n) for n in i.get("lines", [])) or "sem linha"
+                L.append(f"    {i['pattern']} (confiança {i['confidence']:.0%}; linhas {lines})")
+                L.append(f"      Faltando: {', '.join(i.get('missing', []))}")
+    return "\n".join(L)
+
 def para_json(analises):
     """Síntese + erros em estrutura JSON (uma entrada por arquivo)."""
     files = []
@@ -121,6 +169,7 @@ def para_json(analises):
             "lexical_errors": a["erros_lexicos"],
             "syntax_errors": a["erros_sintaticos"],
             "fatal": r is None,
+            "semantic": a.get("semantic", {"patterns": [], "coercions": [], "inferences": []}),
         }
         if r is None:
             item["message"] = "sem síntese (erro fatal)"

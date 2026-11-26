@@ -1,20 +1,24 @@
 import sys
 
 from parser.report import (arquivos_tonto, analisar_arquivo, tabela_sintese,
-                           tabela_simbolos_texto, relatorio_erros, para_json)
+                           tabela_simbolos_texto, relatorio_erros,
+                           relatorio_semantico, para_json)
 
 
 def main():
     args = sys.argv[1:]
     em_texto = "--texto" in args
     em_simbolos = "--simbolos" in args
+    em_semantico = "--semantico" in args
     arquivos = arquivos_tonto([a for a in args if not a.startswith("--")])
     if not arquivos:
-        sys.exit("uso: python main.py arquivo.tonto|pasta [...] [--texto|--simbolos]")
+        sys.exit("uso: python main.py arquivo.tonto|pasta [...] [--texto|--simbolos|--semantico]")
     analises = [analisar_arquivo(a) for a in arquivos]
 
     if em_simbolos:
         print(tabela_simbolos_texto(analises))
+    elif em_semantico:
+        print(relatorio_semantico(analises))
     elif em_texto:
         print(tabela_sintese(analises))
         print()

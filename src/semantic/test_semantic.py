@@ -391,9 +391,10 @@ class TestRole(unittest.TestCase):
     def test_genset_de_rolemixin_nao_e_do_role(self):
         result = analisar(
             "kind Person\n"
+            "kind Organization\n"
             "roleMixin Customer\n"
             "role Buyer specializes Person\n"
-            "role Seller specializes Person\n"
+            "role Seller specializes Organization\n"
             "disjoint complete genset Customers {\n"
             "    general Customer\n"
             "    specifics Buyer, Seller\n"
