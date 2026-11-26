@@ -28,7 +28,7 @@ class SubkindDetector:
         if not subkinds:
             return detection
 
-        self._validate_parents(ctx, detection, subkinds)
+        invalid_parents = self._validate_parents(ctx, detection, subkinds)
 
         handled: set[str] = set()
         for genset in ctx.gensets:
@@ -36,20 +36,25 @@ class SubkindDetector:
                 continue
             if ctx.dominant_stereotype(genset) != PATTERN:
                 continue
-            detection.patterns.append(self._check_genset(ctx, detection, genset))
+            detection.patterns.append(
+                self._check_genset(ctx, detection, genset, invalid_parents))
             handled.update(ctx.specifics(genset))
 
-        detection.patterns.extend(self._uncovered_patterns(ctx, subkinds, handled))
+        detection.patterns.extend(
+            self._uncovered_patterns(ctx, subkinds, handled, invalid_parents))
         return detection
 
     
-    def _validate_parents(self, ctx, detection: Detection, classes: list[dict]) -> None:
+    def _validate_parents(self, ctx, detection: Detection, classes: list[dict]) -> set[str]:
+        """Valida a classe-mãe e devolve os subkinds com pai inválido."""
+        invalid: set[str] = set()
         for decl in classes:
             name = decl.get("name")
             line = decl.get("line") or ctx.line_of(name)
             parents = ctx.parents_of(name)
 
             if not parents:
+                invalid.add(name)
                 detection.coercions.append(Coercion(
                     line=line,
                     code="ODP_SUBKIND_SEM_PAI",
@@ -63,6 +68,7 @@ class SubkindDetector:
 
             for parent in parents:
                 if not ctx.is_class(parent):
+                    invalid.add(name)
                     detection.coercions.append(Coercion(
                         line=line,
                         code="ODP_SUBKIND_PAI_DESCONHECIDO",
@@ -75,8 +81,24 @@ class SubkindDetector:
                             f"'subkind {name} specializes {parent}'."
                         ),
                     ))
+                elif not ctx.is_kind(parent):
+                    invalid.add(name)
+                    detection.coercions.append(Coercion(
+                        line=line,
+                        code="ODP_SUBKIND_PAI_NAO_E_KIND",
+                        message=(
+                            f"O subkind {name} especializa {parent}, que é "
+                            f"'{ctx.stereotype_of(parent)}' e não 'kind'."
+                        ),
+                        suggestion=(
+                            "Em Subkind, a classe-mãe deve ser um kind "
+                            f"(ex.: 'kind {parent} ...')."
+                        ),
+                    ))
+        return invalid
 
-    def _check_genset(self, ctx, detection: Detection, genset: dict) -> PatternMatch:
+    def _check_genset(self, ctx, detection: Detection, genset: dict,
+                      invalid_parents: set[str] | None = None) -> PatternMatch:
         general = genset.get("general")
         specifics = ctx.specifics(genset)
         genset_name = genset.get("name") or "(sem nome)"
@@ -95,6 +117,20 @@ class SubkindDetector:
                 suggestion=(
                     f"Declare '{general}' ou corrija o campo 'general' do genset "
                     f"{genset_name}."
+                ),
+            ))
+        elif not ctx.is_kind(general):
+            status = STATUS_INVALIDO
+            detection.coercions.append(Coercion(
+                line=line,
+                code="ODP_SUBKIND_GENERAL_NAO_E_KIND",
+                message=(
+                    f"O genset {genset_name} tem general {general}, que é "
+                    f"'{ctx.stereotype_of(general)}' e não 'kind'."
+                ),
+                suggestion=(
+                    "Em Subkind, o 'general' do genset deve ser um kind "
+                    f"(ex.: 'kind {general} ...')."
                 ),
             ))
 
@@ -116,6 +152,10 @@ class SubkindDetector:
                     f"'subkind <Nome> specializes {general}'."
                 ),
             ))
+
+        # A coerção da classe-mãe já foi emitida; aqui só propagamos o status.
+        if invalid_parents and any(name in invalid_parents for name in specifics):
+            status = STATUS_INVALIDO
 
         if not ctx.has_modifier(genset, DISJOINT):
             status = STATUS_INVALIDO
@@ -172,7 +212,8 @@ class SubkindDetector:
         )
 
 
-    def _uncovered_patterns(self, ctx, classes: list[dict], handled: set[str]) -> list[PatternMatch]:
+    def _uncovered_patterns(self, ctx, classes: list[dict], handled: set[str],
+                            invalid_parents: set[str] | None = None) -> list[PatternMatch]:
         pending = [decl for decl in classes if decl.get("name") not in handled]
         groups: dict[str | None, list[str]] = {}
 
@@ -184,9 +225,12 @@ class SubkindDetector:
         patterns = []
         for general, names in groups.items():
             specifics = list(dict.fromkeys(names))
+            # Sem genset: incompleto. Mas se a classe-mãe é inválida, o padrão
+            # inteiro é inválido (o problema é de estrutura, não de ausência).
+            invalid = invalid_parents and any(n in invalid_parents for n in specifics)
             patterns.append(PatternMatch(
                 pattern=PATTERN,
-                status=STATUS_INCOMPLETO,
+                status=STATUS_INVALIDO if invalid else STATUS_INCOMPLETO,
                 lines=ctx.lines_for(general, *specifics),
                 participants={
                     "general": general,

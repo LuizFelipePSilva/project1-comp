@@ -60,6 +60,47 @@ class TestSubkind(unittest.TestCase):
         self.assertEqual(padrao.participants["genset"], "VehicleSubkinds")
         self.assertEqual(result.coercions, [])
 
+    def test_subkind_sem_complete_tambem_e_completo(self):
+        result = analisar(
+            "kind Vehicle\n"
+            "subkind Car specializes Vehicle\n"
+            "subkind Truck specializes Vehicle\n"
+            "disjoint genset VehicleSubkinds {\n"
+            "    general Vehicle\n"
+            "    specifics Car, Truck\n"
+            "}\n"
+        )
+
+        self.assertEqual(result.coercions, [])
+        self.assertEqual(padroes(result, "subkind")[0].status, STATUS_COMPLETO)
+
+    def test_subkind_pai_nao_e_kind(self):
+        result = analisar(
+            "kind Vehicle\n"
+            "collective Fleet\n"
+            "subkind Car specializes Fleet\n"
+        )
+
+        self.assertIn("ODP_SUBKIND_PAI_NAO_E_KIND", codigos(result))
+        coercao = next(c for c in result.coercions
+                       if c.code == "ODP_SUBKIND_PAI_NAO_E_KIND")
+        self.assertIn("kind", coercao.suggestion)
+        self.assertEqual(padroes(result, "subkind")[0].status, STATUS_INVALIDO)
+
+    def test_subkind_genset_general_nao_e_kind(self):
+        result = analisar(
+            "kind Vehicle\n"
+            "collective Fleet\n"
+            "subkind Car specializes Vehicle\n"
+            "disjoint genset FleetSubkinds {\n"
+            "    general Fleet\n"
+            "    specifics Car\n"
+            "}\n"
+        )
+
+        self.assertIn("ODP_SUBKIND_GENERAL_NAO_E_KIND", codigos(result))
+        self.assertEqual(padroes(result, "subkind")[0].status, STATUS_INVALIDO)
+
     def test_subkind_sem_disjoint_gera_coercao(self):
         result = analisar(
             "kind Vehicle\n"
@@ -112,7 +153,7 @@ class TestSubkind(unittest.TestCase):
         self.assertIn("ODP_SUBKIND_SEM_PAI", codigos(result))
         encontrados = padroes(result, "subkind")
         self.assertEqual(len(encontrados), 1)
-        self.assertEqual(encontrados[0].status, STATUS_INCOMPLETO)
+        self.assertEqual(encontrados[0].status, STATUS_INVALIDO)
         self.assertIsNone(encontrados[0].participants["general"])
         self.assertEqual(encontrados[0].lines, [2])
 
@@ -209,6 +250,86 @@ class TestRole(unittest.TestCase):
         self.assertEqual(result.coercions, [])
         self.assertEqual(padroes(result, "role")[0].status, STATUS_COMPLETO)
 
+    def test_role_pai_nao_e_kind(self):
+        result = analisar(
+            "kind Person\n"
+            "roleMixin Customer\n"
+            "role Buyer specializes Customer\n"
+        )
+
+        self.assertIn("ODP_ROLE_PAI_NAO_E_KIND", codigos(result))
+        self.assertEqual(padroes(result, "role")[0].status, STATUS_INVALIDO)
+
+    def test_role_genset_general_nao_e_kind(self):
+        result = analisar(
+            "kind Person\n"
+            "collective Group\n"
+            "role Student specializes Person\n"
+            "role Teacher specializes Person\n"
+            "complete genset PersonRoles {\n"
+            "    general Group\n"
+            "    specifics Student, Teacher\n"
+            "}\n"
+        )
+
+        self.assertIn("ODP_ROLE_GENERAL_NAO_E_KIND", codigos(result))
+        self.assertEqual(padroes(result, "role")[0].status, STATUS_INVALIDO)
+
+    def test_role_mediado_por_relator_com_genset_proprio_nao_e_ocultado(self):
+        result = analisar(
+            "kind Person\n"
+            "role Student specializes Person\n"
+            "role Teacher specializes Person\n"
+            "relator Enrollment {\n"
+            "    @mediation [1..*] -- [1..*] Student\n"
+            "    @mediation [1..*] -- [1..*] Teacher\n"
+            "}\n"
+            "complete genset PersonRoles {\n"
+            "    general Person\n"
+            "    specifics Student, Teacher\n"
+            "}\n"
+        )
+
+        encontrados = padroes(result, "role")
+        self.assertEqual(len(encontrados), 1)
+        self.assertEqual(encontrados[0].status, STATUS_COMPLETO)
+        self.assertEqual(encontrados[0].participants["genset"], "PersonRoles")
+        self.assertEqual(result.coercions, [])
+
+    def test_role_mediado_por_relator_sem_genset_pertence_ao_relator(self):
+        result = analisar(
+            "kind Person\n"
+            "role Student specializes Person\n"
+            "relator Enrollment {\n"
+            "    @mediation [1..*] -- [1..*] Student\n"
+            "}\n"
+        )
+
+        self.assertEqual(padroes(result, "role"), [])
+        self.assertEqual(result.coercions, [])
+
+    def test_role_de_rolemixin_com_genset_proprio_nao_e_ocultado(self):
+        result = analisar(
+            "kind Person\n"
+            "roleMixin Customer\n"
+            "role Buyer specializes Person\n"
+            "role Seller specializes Person\n"
+            "disjoint complete genset Customers {\n"
+            "    general Customer\n"
+            "    specifics Buyer, Seller\n"
+            "}\n"
+            "complete genset PersonRoles {\n"
+            "    general Person\n"
+            "    specifics Buyer, Seller\n"
+            "}\n"
+        )
+
+        encontrados = padroes(result, "role")
+        self.assertEqual(len(encontrados), 1)
+        self.assertEqual(encontrados[0].status, STATUS_COMPLETO)
+        self.assertEqual(encontrados[0].participants["genset"], "PersonRoles")
+        self.assertNotIn("ODP_ROLE_DISJOINT", codigos(result))
+
     def test_role_sem_genset_fica_incompleto(self):
         result = analisar(
             "kind Person\n"
@@ -227,6 +348,7 @@ class TestRole(unittest.TestCase):
         self.assertIn("ODP_ROLE_SEM_PAI", codigos(result))
         encontrados = padroes(result, "role")
         self.assertEqual(len(encontrados), 1)
+        self.assertEqual(encontrados[0].status, STATUS_INVALIDO)
         self.assertIsNone(encontrados[0].participants["general"])
 
     def test_genset_de_rolemixin_nao_e_do_role(self):
@@ -339,21 +461,28 @@ class TestIntegracao(unittest.TestCase):
 
         subkinds = padroes(result, "subkind")
         self.assertEqual(len(subkinds), 2)
-        completo = next(p for p in subkinds if p.status == STATUS_COMPLETO)
-        self.assertEqual(completo.participants["genset"], "StaffLevel")
-        self.assertEqual(completo.participants["specifics"], ["SeniorStaff", "JuniorStaff"])
-        incompleto = next(p for p in subkinds if p.status == STATUS_INCOMPLETO)
-        self.assertEqual(incompleto.participants["specifics"], ["Classroom"])
+        staff = next(p for p in subkinds if p.participants["genset"] == "StaffLevel")
+        self.assertEqual(staff.status, STATUS_INVALIDO)
+        self.assertEqual(staff.participants["specifics"], ["SeniorStaff", "JuniorStaff"])
+        classroom = next(p for p in subkinds if p.participants["genset"] is None)
+        self.assertEqual(classroom.participants["specifics"], ["Classroom"])
+        self.assertEqual(classroom.status, STATUS_INCOMPLETO)
 
         roles = padroes(result, "role")
         self.assertEqual(len(roles), 4)
+        student_status = next(
+            p for p in roles if p.participants["genset"] == "StudentStatus")
+        self.assertEqual(student_status.status, STATUS_INVALIDO)
         self.assertEqual(
-            sum(1 for p in roles if p.status == STATUS_COMPLETO), 1)
+            sum(1 for p in roles if p.status == STATUS_COMPLETO), 0)
         self.assertEqual(
-            next(p for p in roles if p.status == STATUS_COMPLETO).participants["genset"],
-            "StudentStatus",
-        )
-        self.assertEqual(result.coercions, [])
+            sum(1 for p in roles if p.status == STATUS_INCOMPLETO), 1)
+
+        # Staff é collective e UniversityStudent é role: nenhum dos dois é kind.
+        self.assertIn("ODP_SUBKIND_PAI_NAO_E_KIND", codigos(result))
+        self.assertIn("ODP_SUBKIND_GENERAL_NAO_E_KIND", codigos(result))
+        self.assertIn("ODP_ROLE_PAI_NAO_E_KIND", codigos(result))
+        self.assertIn("ODP_ROLE_GENERAL_NAO_E_KIND", codigos(result))
 
     def test_ordem_dos_detectores(self):
         self.assertEqual(registered_names()[:2], ["subkind", "role"])

@@ -133,6 +133,14 @@ class SemanticContext:
         decl = self.class_decl(name)
         return decl.get("stereotype") if decl else None
 
+    def is_kind(self, name: str | None) -> bool:
+        """``True`` se a classe foi declarada com estereótipo ``kind``.
+
+        Subkind e Role exigem que a classe-mãe (e o ``general`` do genset)
+        seja um kind, e não outro sortal (collective, quantity, relator...).
+        """
+        return self.stereotype_of(name) == "kind"
+
     def by_stereotype(self, *stereotypes: str) -> list[dict]:
         wanted = set(stereotypes)
         return [c for c in self.classes if c.get("stereotype") in wanted]
@@ -196,6 +204,25 @@ class SemanticContext:
     def genset_line(self, genset: dict) -> int | None:
         line = genset.get("line")
         return line if line is not None else self.line_of(genset.get("general"))
+
+    def mediated_roles(self) -> set[str]:
+        """Roles alvo de ``@mediation`` dentro de classes ``relator``.
+
+        Esses roles participam do padrão **Relator**. O detector de Role usa
+        esse conjunto para não duplicar o padrão, mas nunca descarta um role
+        que também participe de um genset de Role válido.
+        """
+        roles: set[str] = set()
+        for decl in self.classes:
+            if decl.get("stereotype") != "relator":
+                continue
+            for member in decl.get("attributes") or []:
+                if (member.get("kind") == "relation"
+                        and member.get("stereotype") == "mediation"):
+                    target = member.get("target")
+                    if self.stereotype_of(target) == "role":
+                        roles.add(target)
+        return roles
 
     @staticmethod
     def has_modifier(genset: dict, modifier: str) -> bool:
