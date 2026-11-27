@@ -17,6 +17,18 @@ Os diagnósticos semânticos incluem localização por linha e sugestões de coe
 
 ## Execução
 
+### Requisitos e instalação
+
+- Python 3.10 ou superior
+- PLY 3.11
+
+```bash
+cd src
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r ../dataset-test/requirements.txt
+```
+
 Na pasta `src/`, use `--semantico` para gerar o relatório no terminal:
 
 ```bash
